@@ -1,0 +1,17 @@
+[package]
+name = "params"
+version = "0.0.1"
+authors = ["Skyler Lipthay <skyler.lipthay@gmail.com>"]
+description = "A multi-source request parameters parser for Iron."
+readme = "README.md"
+license = "MIT"
+repository = "https://github.com/iron/params"
+documentation = "http://ironframework.io/doc/params/index.html"
+
+[dependencies]
+bodyparser = "*"
+formdata = { git = "https://github.com/SkylerLipthay/formdata" }
+iron = "*"
+plugin = "*"
+rustc-serialize = "*"
+urlencoded = "*"
