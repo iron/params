@@ -504,12 +504,8 @@ impl ToParams for Json {
             Json::Boolean(value) => Ok(Value::Boolean(value)),
             Json::Null => Ok(Value::Null),
             Json::Array(ref value) => {
-                let mut result = Vec::with_capacity(value.len());
-                for json in value {
-                    result.push(try!(json.to_value()));
-                }
-
-                Ok(Value::Array(result))
+                let result = value.iter().map(|v| v.to_value()).collect();
+                Ok(Value::Array(try!(result)))
             },
             Json::Object(ref value) => {
                 let mut result = Map::new();
