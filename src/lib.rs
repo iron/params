@@ -14,8 +14,8 @@ mod conversion;
 
 use std::collections::BTreeMap;
 use std::error::Error as StdError;
-use std::fmt;
-use std::io::Read;
+use std::{fmt, fs};
+use std::io::{self, Read};
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 
@@ -152,6 +152,11 @@ pub struct File {
 }
 
 impl File {
+    /// Attempts to open the file in read-only mode.
+    pub fn open(&self) -> io::Result<fs::File> {
+        fs::File::open(&self.path)
+    }
+
     /// The path to the temporary file where the data was saved.
     pub fn path(&self) -> &Path {
         self.path.as_path()
