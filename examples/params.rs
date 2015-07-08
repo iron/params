@@ -13,20 +13,20 @@ fn handle(req: &mut Request) -> IronResult<Response> {
 // Execute the following cURL requests and watch your terminal for the parsed parameters.
 //
 // `curl -i "localhost:3000" -H "Content-Type: application/json" -d '{"name":"jason","age":2}'`
-// => Ok({"age": U64(2), "name": String("jason")})
+// => Ok({"age": 2, "name": "jason"})
 //
 // `curl -i -X POST "http://localhost:3000/" --data "fruit=apple&name=iron&fruit=pear"`
-// => Ok({"fruit": String("pear"), "name": String("iron")})
+// => Ok({"fruit": "pear", "name": "iron"})
 //
 // `curl -i "http://localhost:3000/?x\[\]=1&x\[\]=2" -F "images[]=@/path/to/file.jpg"`
 // => Ok({
-//        "images": Array([File(File {
+//        "images": [File {
 //            path: "/tmp/path/to/file.jpg",
 //            filename: Some("file.jpg"),
 //            content_type: Mime(Image, Jpeg, []),
-//            size: 1234
-//        })]),
-//        "x": Array([String("1"), String("2")])
+//            size: 280906
+//        }],
+//        "x": ["1", "2"]
 //    })
 //
 // `curl -i -X POST "http://localhost:3000/" --data "x[][]=2"`

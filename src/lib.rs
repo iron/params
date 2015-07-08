@@ -29,7 +29,7 @@ use rustc_serialize::json::Json;
 pub use conversion::FromValue;
 
 /// A representation of all possible types of request parameters.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum Value {
     /// A `null` from the request's JSON body.
     Null,
@@ -124,6 +124,22 @@ impl Value {
     }
 }
 
+impl fmt::Debug for Value {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Value::Null => f.write_str("null"),
+            Value::Boolean(value) => value.fmt(f),
+            Value::I64(value) => value.fmt(f),
+            Value::U64(value) => value.fmt(f),
+            Value::F64(value) => value.fmt(f),
+            Value::String(ref value) => value.fmt(f),
+            Value::File(ref value) => value.fmt(f),
+            Value::Array(ref value) => value.fmt(f),
+            Value::Map(ref value) => value.fmt(f),
+        }
+    }
+}
+
 /// An uploaded file that was received as part of `multipart/form-data` parsing.
 ///
 /// Files are streamed to disk because they may not fit in memory.
@@ -195,7 +211,7 @@ impl Map {
     /// # use params::{Map, Value};
     /// let mut map = Map::new();
     /// map.assign("name", Value::String("Callie".into())).unwrap();
-    /// assert_eq!(format!("{:?}", map), r#"{"name": String("Callie")}"#);
+    /// assert_eq!(format!("{:?}", map), r#"{"name": "Callie"}"#);
     /// ```
     ///
     /// ```
@@ -203,7 +219,7 @@ impl Map {
     /// let mut map = Map::new();
     /// map.assign("names[]", Value::String("Anne".into())).unwrap();
     /// map.assign("names[]", Value::String("Bob".into())).unwrap();
-    /// assert_eq!(format!("{:?}", map), r#"{"names": Array([String("Anne"), String("Bob")])}"#);
+    /// assert_eq!(format!("{:?}", map), r#"{"names": ["Anne", "Bob"]}"#);
     /// ```
     ///
     /// ```
@@ -211,7 +227,7 @@ impl Map {
     /// let mut map = Map::new();
     /// map.assign("pts[][x]", Value::I64(3)).unwrap();
     /// map.assign("pts[][y]", Value::I64(9)).unwrap();
-    /// assert_eq!(format!("{:?}", map), r#"{"pts": Array([Map({"x": I64(3), "y": I64(9)})])}"#);
+    /// assert_eq!(format!("{:?}", map), r#"{"pts": [{"x": 3, "y": 9}]}"#);
     /// ```
     pub fn assign(&mut self, path: &str, value: Value) -> Result<(), ParamsError> {
         let (base, remainder) = try!(eat_base(path));
