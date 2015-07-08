@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use num::NumCast;
 
-use super::Value;
+use super::{File, Value};
 
 /// An interface for converting from `Value` variants.
 pub trait FromValue {
@@ -11,8 +11,11 @@ pub trait FromValue {
     fn from_value(value: &Value) -> Option<Self>;
 }
 
-// TODO: impl FromValue for Value (needs impl Clone for Value?)
-// TODO: impl FromValue for UploadedFile (needs impl Clone for Value?)
+impl FromValue for Value {
+    fn from_value(value: &Value) -> Option<Self> {
+        Some(value.clone())
+    }
+}
 
 macro_rules! num_from_value {
     ($ty:ty) => {
@@ -84,6 +87,16 @@ impl FromValue for bool {
             Value::U64(value) if value == 1 => Some(true),
             Value::String(ref value) if FALSE_STRINGS.contains(&&value[..]) => Some(false),
             Value::String(ref value) if TRUE_STRINGS.contains(&&value[..]) => Some(true),
+            _ => None,
+        }
+    }
+}
+
+/// Extracts from `File` variant.
+impl FromValue for File {
+    fn from_value(value: &Value) -> Option<File> {
+        match *value {
+            Value::File(ref file) => Some(file.clone()),
             _ => None,
         }
     }
