@@ -5,9 +5,12 @@
 extern crate bodyparser;
 extern crate formdata;
 extern crate iron;
+extern crate num;
 extern crate plugin;
 extern crate rustc_serialize;
 extern crate urlencoded;
+
+mod conversion;
 
 use std::collections::BTreeMap;
 use std::error::Error as StdError;
@@ -20,6 +23,8 @@ use iron::{headers, Headers, mime, Request};
 use iron::typemap::Key;
 use plugin::{Pluggable, Plugin};
 use rustc_serialize::json::Json;
+
+pub use conversion::FromValue;
 
 /// A representation of all possible types of request parameters.
 #[derive(Clone, Debug, PartialEq)]
@@ -213,6 +218,35 @@ impl Map {
         }
 
         value
+    }
+
+    /// Converts this map to a raw `BTreeMap` with values of all the same type.
+    ///
+    /// ```
+    /// # use params::{Map, Value};
+    /// # use std::collections::BTreeMap;
+    /// let mut map = Map::new();
+    /// map.assign("x", Value::String("10.5".into())).unwrap();
+    /// map.assign("y", Value::I64(15)).unwrap();
+    ///
+    /// let mut expected = BTreeMap::new();
+    /// expected.insert(String::from("x"), 10.5f32);
+    /// expected.insert(String::from("y"), 15.0f32);
+    ///
+    /// assert_eq!(map.to_strict_map::<f32>(), Some(expected));
+    /// ```
+    pub fn to_strict_map<T: FromValue>(&self) -> Option<BTreeMap<String, T>> {
+        let mut map = BTreeMap::new();
+
+        for (key, value) in &self.0 {
+            if let Some(converted_value) = T::from_value(value) {
+                map.insert(key.clone(), converted_value);
+            } else {
+                return None;
+            }
+        }
+
+        Some(map)
     }
 }
 
