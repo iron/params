@@ -17,9 +17,11 @@ use std::error::Error as StdError;
 use std::fmt;
 use std::io::Read;
 use std::ops::{Deref, DerefMut};
+use std::path::{Path, PathBuf};
 
-pub use formdata::UploadedFile;
+use formdata::UploadedFile;
 use iron::{headers, Headers, mime, Request};
+use iron::mime::Mime;
 use iron::typemap::Key;
 use plugin::{Pluggable, Plugin};
 use rustc_serialize::json::Json;
@@ -44,7 +46,7 @@ pub enum Value {
     /// parameters.
     String(String),
     /// A temporary file processed from a `multipart/form-data` request.
-    File(UploadedFile),
+    File(File),
     /// Either an array of JSON values or an amalgamation of URL (GET) parameters,
     /// `application/x-www-form-urlencoded` parameters, or `multipart/form-data` parameters. Such
     /// parameters should be in the form `my_list[]=1&my_list[]=2` to be processed into this
@@ -118,6 +120,51 @@ impl Value {
         match *self {
             Value::Map(ref map) => Ok(map.contains_key(key)),
             _ => Err(CannotInsert),
+        }
+    }
+}
+
+/// An uploaded file that was received as part of `multipart/form-data` parsing.
+///
+/// Files are streamed to disk because they may not fit in memory.
+#[derive(Clone, Debug, PartialEq)]
+pub struct File {
+    path: PathBuf,
+    filename: Option<String>,
+    content_type: Mime,
+    size: usize,
+}
+
+impl File {
+    /// The path to the temporary file where the data was saved.
+    pub fn path(&self) -> &Path {
+        self.path.as_path()
+    }
+
+    /// The filename that was specified in the request, unfiltered. It may or may not be legal on
+    /// the local filesystem.
+    pub fn filename(&self) -> Option<&str> {
+        self.filename.as_ref().map(|f| &**f)
+    }
+
+    /// The unvalidated `Content-Type` that was specified in the request data.
+    pub fn content_type(&self) -> &Mime {
+        &self.content_type
+    }
+
+    /// The size of the file, in bytes.
+    pub fn size(&self) -> usize {
+        self.size
+    }
+}
+
+impl From<UploadedFile> for File {
+    fn from(file: UploadedFile) -> File {
+        File {
+            path: file.path,
+            filename: file.filename,
+            content_type: file.content_type,
+            size: file.size,
         }
     }
 }
@@ -399,7 +446,7 @@ impl<'a, 'b> Plugin<Request<'a, 'b>> for Params {
 fn try_parse_json_into_map(req: &mut Request) -> Result<Map, ParamsError> {
     let need_parse = req.headers.get::<headers::ContentType>().map(|header| {
         match **header {
-            mime::Mime(mime::TopLevel::Application, mime::SubLevel::Json, _) => true,
+            Mime(mime::TopLevel::Application, mime::SubLevel::Json, _) => true,
             _ => false
         }
     }).unwrap_or(false);
@@ -468,8 +515,8 @@ fn try_parse_multipart(req: &mut Request, map: &mut Map) -> Result<(), ParamsErr
         try!(map.assign(&path, Value::String(value)));
     }
 
-    for (path, value) in form_data.files {
-        try!(map.assign(&path, Value::File(value)));
+    for (path, file) in form_data.files {
+        try!(map.assign(&path, Value::File(file.into())));
     }
 
     Ok(())
