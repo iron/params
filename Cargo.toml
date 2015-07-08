@@ -10,7 +10,7 @@ documentation = "http://ironframework.io/doc/params/index.html"
 
 [dependencies]
 bodyparser = "*"
-formdata = { git = "https://github.com/SkylerLipthay/formdata" }
+formdata = "*"
 iron = "*"
 num = "*"
 plugin = "*"
