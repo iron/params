@@ -20,7 +20,7 @@ use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 
 use formdata::UploadedFile;
-use iron::{headers, Headers, mime, Request};
+use iron::{headers, mime, Request};
 use iron::mime::Mime;
 use iron::typemap::Key;
 use plugin::{Pluggable, Plugin};
@@ -520,11 +520,13 @@ impl ToParams for Json {
 }
 
 fn try_parse_multipart(req: &mut Request, map: &mut Map) -> Result<(), ParamsError> {
-    use formdata::Error::*;
+    let boundary = match formdata::get_multipart_boundary(&req.headers) {
+        Ok(boundary) => boundary,
+        Err(_) => return Ok(()),
+    };
 
-    let form_data = match formdata::parse_multipart(&mut IronRequest(req)) {
+    let form_data = match formdata::parse_multipart(&mut req.body, boundary) {
         Ok(form_data) => form_data,
-        Err(NoRequestContentType) | Err(NotMultipart) | Err(NotFormData) => return Ok(()),
         Err(err) => return Err(FormDataError(err)),
     };
 
@@ -557,16 +559,4 @@ fn try_parse_url_encoded<'a, 'b, P>(req: &mut Request<'a, 'b>, map: &mut Map)
     }
 
     Ok(())
-}
-
-struct IronRequest<'c, 'a: 'c, 'b: 'a>(&'c mut Request<'a, 'b>);
-
-impl<'c, 'a: 'c, 'b: 'a> formdata::Request for IronRequest<'c, 'a, 'b> {
-    fn headers(&self) -> &Headers {
-        &self.0.headers
-    }
-
-    fn read_mut(&mut self) -> &mut Read {
-        &mut self.0.body
-    }
 }
