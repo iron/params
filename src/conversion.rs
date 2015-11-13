@@ -6,7 +6,7 @@ use num::NumCast;
 use super::{File, Value};
 
 /// An interface for converting from `Value` variants.
-pub trait FromValue {
+pub trait FromValue: Sized {
     /// Returns `Some` if the conversion was successful, `None` otherwise.
     fn from_value(value: &Value) -> Option<Self>;
 }
