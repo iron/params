@@ -17,7 +17,7 @@ use std::error::Error as StdError;
 use std::{fmt, fs};
 use std::io::{self, Read};
 use std::ops::{Deref, DerefMut};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use formdata::UploadedFile;
 use iron::{headers, mime, Request};
@@ -144,49 +144,39 @@ impl fmt::Debug for Value {
 ///
 /// Files are streamed to disk because they may not fit in memory.
 #[derive(Clone, Debug, PartialEq)]
-pub struct File {
-    path: PathBuf,
-    filename: Option<String>,
-    content_type: Mime,
-    size: usize,
-}
+pub struct File(UploadedFile);
 
 impl File {
     /// Attempts to open the file in read-only mode.
     pub fn open(&self) -> io::Result<fs::File> {
-        fs::File::open(&self.path)
+        fs::File::open(&self.0.path)
     }
 
     /// The path to the temporary file where the data was saved.
     pub fn path(&self) -> &Path {
-        self.path.as_path()
+        self.0.path.as_path()
     }
 
     /// The filename that was specified in the request, unfiltered. It may or may not be legal on
     /// the local filesystem.
     pub fn filename(&self) -> Option<&str> {
-        self.filename.as_ref().map(|f| &**f)
+        self.0.filename.as_ref().map(|f| &**f)
     }
 
     /// The unvalidated `Content-Type` that was specified in the request data.
     pub fn content_type(&self) -> &Mime {
-        &self.content_type
+        &self.0.content_type
     }
 
     /// The size of the file, in bytes.
     pub fn size(&self) -> usize {
-        self.size
+        self.0.size
     }
 }
 
 impl From<UploadedFile> for File {
     fn from(file: UploadedFile) -> File {
-        File {
-            path: file.path,
-            filename: file.filename,
-            content_type: file.content_type,
-            size: file.size,
-        }
+        File(file)
     }
 }
 
