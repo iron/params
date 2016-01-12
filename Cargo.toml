@@ -4,7 +4,7 @@ version = "0.0.2"
 authors = ["Skyler Lipthay <skyler.lipthay@gmail.com>"]
 description = "A multi-source request parameters parser for Iron."
 readme = "README.md"
-license = "MIT"
+license = "MIT OR Apache-2.0"
 repository = "https://github.com/iron/params"
 documentation = "http://ironframework.io/doc/params/index.html"
 
