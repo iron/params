@@ -24,7 +24,8 @@ use iron::{headers, mime, Request};
 use iron::mime::Mime;
 use iron::typemap::Key;
 use plugin::{Pluggable, Plugin};
-use rustc_serialize::json::Json;
+use rustc_serialize::json;
+use rustc_serialize::json::{Json, ToJson};
 
 pub use conversion::FromValue;
 
@@ -136,6 +137,36 @@ impl fmt::Debug for Value {
             Value::File(ref value) => value.fmt(f),
             Value::Array(ref value) => value.fmt(f),
             Value::Map(ref value) => value.fmt(f),
+        }
+    }
+}
+
+
+impl ToJson for Value {
+    fn to_json(&self) -> Json {
+        match *self {
+            Value::Null => Json::Null,
+            Value::Boolean(value) => value.to_json(),
+            Value::I64(value) => value.to_json(),
+            Value::U64(value) => value.to_json(),
+            Value::F64(value) => value.to_json(),
+            Value::String(ref value) => value.to_json(),
+            //Value::File(ref value) => value.fmt(f),
+            Value::Array(ref value) => {
+                let result: json::Array = value.iter().map(|v| v.to_json()).collect();
+                result.to_json()
+            },
+            Value::Map(ref value) => {
+                let mut result: json::Object = json::Object::new();
+                let Map(ref map) = *value;
+                for (key, val) in map {
+                    result.insert(key.clone(), val.to_json());
+                }
+                result.to_json()
+            },
+            _ => {
+                panic!("Params containing File should not be jsonrized.");
+            }
         }
     }
 }
