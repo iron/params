@@ -20,12 +20,12 @@ fn handle(req: &mut Request) -> IronResult<Response> {
 //
 // `curl -i "http://localhost:3000/?x\[\]=1&x\[\]=2" -F "images[]=@/path/to/file.jpg"`
 // => Ok({
-//        "images": [File {
+//        "images": [File(UploadedFile {
 //            path: "/tmp/path/to/file.jpg",
 //            filename: Some("file.jpg"),
 //            content_type: Mime(Image, Jpeg, []),
 //            size: 280906
-//        }],
+//        })],
 //        "x": ["1", "2"]
 //    })
 //
