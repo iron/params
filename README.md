@@ -7,7 +7,28 @@ A plugin for the [Iron](https://github.com/iron/iron) web framework that parses 
 * URL-encoded `Content-Type: application/x-www-form-urlencoded` parameters
 * Multipart form data (`Content-Type: multipart/form-data`)
 
-See `examples/params.rs` for details.
+This plugin combines all request parameters from these sources into a single `params::Map` accessible through any Iron request using `req.get_ref::<params::Params>()`. Example:
+
+```rust
+fn handler(req: &mut Request) -> IronResult<Response> {
+    use params::{Map, Params};
+
+    let map: Map = try!(req.get_ref::<Params>());
+
+    match map.find(&["user", "name"]) {
+        // Assume, for example, the request URL here is:
+        // http://localhost:3000/handler?user[name]=Marie
+        Some(&Value::String(ref name)) => assert_eq!(name, "Marie"),
+        _ => panic!("Unexpected parameter type!"),
+    }
+}
+```
+
+You can perform custom request parameter deserialization by implementing `params::FromValue` for any `Sized` type. See `src/conversion.rs` for inspiration!
+
+This crate is fully documented, and we're [working on](https://github.com/iron/params/issues/10) hosting it at [ironframework.io](http://ironframework.io).
+
+See `examples/params.rs` for an interactive example.
 
 ## License
 
