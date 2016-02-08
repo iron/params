@@ -7,7 +7,8 @@ extern crate formdata;
 extern crate iron;
 extern crate num;
 extern crate plugin;
-extern crate rustc_serialize;
+extern crate serde;
+extern crate serde_json;
 extern crate urlencoded;
 
 mod conversion;
@@ -24,7 +25,7 @@ use iron::{headers, mime, Request};
 use iron::mime::Mime;
 use iron::typemap::Key;
 use plugin::{Pluggable, Plugin};
-use rustc_serialize::json::Json;
+use serde_json::value::Value as Json;
 
 pub use conversion::FromValue;
 
@@ -491,7 +492,7 @@ impl ToParams for Json {
             Json::U64(value) => Ok(Value::U64(value)),
             Json::F64(value) => Ok(Value::F64(value)),
             Json::String(ref value) => Ok(Value::String(value.clone())),
-            Json::Boolean(value) => Ok(Value::Boolean(value)),
+            Json::Bool(value) => Ok(Value::Boolean(value)),
             Json::Null => Ok(Value::Null),
             Json::Array(ref value) => {
                 let result = value.iter().map(|v| v.to_value()).collect();

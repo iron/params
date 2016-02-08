@@ -9,10 +9,11 @@ repository = "https://github.com/iron/params"
 documentation = "http://ironframework.io/doc/params/index.html"
 
 [dependencies]
-bodyparser = "0.0.6"
+bodyparser = "0.1"
 formdata = "0.7"
 iron = "0.2"
 num = "0.1"
 plugin = "0.2"
-rustc-serialize = "0.3"
+serde = "0.6"
+serde_json = "0.6"
 urlencoded = "0.2"
