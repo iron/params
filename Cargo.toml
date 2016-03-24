@@ -10,7 +10,7 @@ documentation = "http://ironframework.io/doc/params/index.html"
 
 [dependencies]
 bodyparser = "0.2.0"
-formdata = "0.7.9"
+formdata = "=0.7.9"
 iron = "0.2.6"
 num = "0.1.31"
 plugin = "0.2.6"
