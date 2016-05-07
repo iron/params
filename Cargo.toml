@@ -10,10 +10,12 @@ documentation = "http://ironframework.io/doc/params/index.html"
 
 [dependencies]
 bodyparser = "0.3"
-formdata = "0.7"
 iron = "0.3"
 num = "0.1"
 plugin = "0.2"
-serde = "0.7"
 serde_json = "0.7"
 urlencoded = "0.3"
+
+[dependencies.multipart]
+features = ["server"]
+version = "0.7"

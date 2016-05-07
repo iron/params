@@ -3,29 +3,28 @@
 //! This plugin is a multi-source request parameters parser.
 
 extern crate bodyparser;
-extern crate formdata;
 extern crate iron;
+extern crate multipart;
 extern crate num;
 extern crate plugin;
-extern crate serde;
 extern crate serde_json;
 extern crate urlencoded;
 
 mod conversion;
 
+use multipart::server::Multipart;
+use iron::{headers, mime, Request};
+use iron::mime::Mime;
+use iron::request::Body;
+use iron::typemap::Key;
+use plugin::{Pluggable, Plugin};
+use serde_json::value::Value as Json;
 use std::collections::BTreeMap;
 use std::error::Error as StdError;
 use std::{fmt, fs};
 use std::io::{self, Read};
 use std::ops::{Deref, DerefMut};
 use std::path::Path;
-
-use formdata::UploadedFile;
-use iron::{headers, mime, Request};
-use iron::mime::Mime;
-use iron::typemap::Key;
-use plugin::{Pluggable, Plugin};
-use serde_json::value::Value as Json;
 
 pub use conversion::FromValue;
 
@@ -144,8 +143,7 @@ impl fmt::Debug for Value {
 /// An uploaded file that was received as part of `multipart/form-data` parsing.
 ///
 /// Files are streamed to disk because they may not fit in memory.
-#[derive(Clone, Debug, PartialEq)]
-pub struct File(UploadedFile);
+pub struct File(multipart::server::SavedFile);
 
 impl File {
     /// Attempts to open the file in read-only mode.
@@ -158,25 +156,52 @@ impl File {
         self.0.path.as_path()
     }
 
-    /// The filename that was specified in the request, unfiltered. It may or may not be legal on
-    /// the local filesystem.
+    /// The filename that was specified in the request, unfiltered.
+    ///
+    /// ## Warning
+    ///
+    /// This may or may not be legal on the local filesystem, and so you should *not* blindly
+    /// append it to a `Path`, as such behavior could easily be exploited by a malicious client.
     pub fn filename(&self) -> Option<&str> {
         self.0.filename.as_ref().map(|f| &**f)
     }
 
-    /// The unvalidated `Content-Type` that was specified in the request data.
-    pub fn content_type(&self) -> &Mime {
-        &self.0.content_type
-    }
-
     /// The size of the file, in bytes.
-    pub fn size(&self) -> usize {
+    pub fn size(&self) -> u64 {
         self.0.size
     }
 }
 
-impl From<UploadedFile> for File {
-    fn from(file: UploadedFile) -> File {
+/// This implementation does not copy or modify the underlying file.
+impl Clone for File {
+    fn clone(&self) -> File {
+        File(multipart::server::SavedFile {
+            path: self.0.path.clone(),
+            filename: self.0.filename.clone(),
+            size: self.0.size,
+        })
+    }
+}
+
+impl fmt::Debug for File {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("File")
+            .field("path", &self.0.path)
+            .field("filename", &self.0.filename)
+            .field("size", &self.0.size)
+            .finish()
+    }
+}
+
+/// Checks only for equality of the file's path.
+impl PartialEq for File {
+    fn eq(&self, other: &File) -> bool {
+        self.0.path == other.0.path
+    }
+}
+
+impl From<multipart::server::SavedFile> for File {
+    fn from(file: multipart::server::SavedFile) -> File {
         File(file)
     }
 }
@@ -372,8 +397,8 @@ pub enum ParamsError {
     BodyError(bodyparser::BodyError),
     /// An error from parsing URL encoded data.
     UrlDecodingError(urlencoded::UrlDecodingError),
-    /// An error from parsing a `multipart/form-data` request body.
-    FormDataError(formdata::Error),
+    /// An I/O error from reading a `multipart/form-data` request body to temporary files.
+    IoError(io::Error),
     /// Invalid parameter path.
     InvalidPath,
     /// Tried to append to a non-array value.
@@ -397,7 +422,7 @@ impl StdError for ParamsError {
         match *self {
             BodyError(ref err) => err.description(),
             UrlDecodingError(ref err) => err.description(),
-            FormDataError(ref err) => err.description(),
+            IoError(ref err) => err.description(),
             InvalidPath => "Invalid parameter path.",
             CannotAppend => "Cannot append to a non-array value.",
             CannotInsert => "Cannot insert into a non-map value.",
@@ -409,7 +434,7 @@ impl StdError for ParamsError {
         match *self {
             BodyError(ref err) => Some(err),
             UrlDecodingError(ref err) => Some(err),
-            FormDataError(ref err) => Some(err),
+            IoError(ref err) => Some(err),
             _ => None,
         }
     }
@@ -418,6 +443,12 @@ impl StdError for ParamsError {
 impl From<bodyparser::BodyError> for ParamsError {
     fn from(err: bodyparser::BodyError) -> ParamsError {
         BodyError(err)
+    }
+}
+
+impl From<io::Error> for ParamsError {
+    fn from(err: io::Error) -> ParamsError {
+        IoError(err)
     }
 }
 
@@ -511,21 +542,54 @@ impl ToParams for Json {
 }
 
 fn try_parse_multipart(req: &mut Request, map: &mut Map) -> Result<(), ParamsError> {
-    let boundary = match formdata::get_multipart_boundary(&req.headers) {
-        Ok(boundary) => boundary,
+    // This is a wrapper that allows an Iron request to be processed by the `multipart` crate. Its
+    // implementation of `multipart::server::HttpRequest` is taken from `multipart` itself, which
+    // requires the `iron` crate feature on compilation. To minimize a messy dependency graph that
+    // is historically proven to cause versioning nightmares, `params` does not make use of the
+    // feature.
+    struct MultipartIronRequest<'r, 'a: 'r, 'b: 'a>(&'r mut Request<'a, 'b>);
+
+    impl<'r, 'a, 'b> multipart::server::HttpRequest for MultipartIronRequest<'r, 'a, 'b> {
+        type Body = &'r mut Body<'a, 'b>;
+
+        fn multipart_boundary(&self) -> Option<&str> {
+            let content_type = match self.0.headers.get::<headers::ContentType>() {
+                Some(content_type) => content_type,
+                None => return None,
+            };
+
+            if let Mime(mime::TopLevel::Multipart, mime::SubLevel::FormData, _) = **content_type {
+                content_type.get_param("boundary").map(|b| b.as_str())
+            } else {
+                None
+            }
+        }
+
+        fn body(self) -> &'r mut Body<'a, 'b> {
+            &mut self.0.body
+        }
+    }
+
+    let mut multipart = match Multipart::from_request(MultipartIronRequest(req)) {
+        Ok(multipart) => multipart,
         Err(_) => return Ok(()),
     };
 
-    let form_data = match formdata::parse_multipart(&mut req.body, boundary) {
-        Ok(form_data) => form_data,
-        Err(err) => return Err(FormDataError(err)),
+    let mut entries = match multipart.save_all() {
+        multipart::server::SaveResult::Full(entries) => entries,
+        multipart::server::SaveResult::Partial(_, err) => return Err(err.into()),
+        multipart::server::SaveResult::Error(err) => return Err(err.into()),
     };
 
-    for (path, value) in form_data.fields {
+    for (path, value) in entries.fields {
         try!(map.assign(&path, Value::String(value)));
     }
 
-    for (path, file) in form_data.files {
+    if !entries.files.is_empty() {
+        entries.dir.keep();
+    }
+
+    for (path, file) in entries.files {
         try!(map.assign(&path, Value::File(file.into())));
     }
 
