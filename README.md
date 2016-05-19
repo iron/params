@@ -7,20 +7,32 @@ A plugin for the [Iron](https://github.com/iron/iron) web framework that parses 
 * URL-encoded `Content-Type: application/x-www-form-urlencoded` parameters
 * Multipart form data (`Content-Type: multipart/form-data`)
 
-This plugin combines all request parameters from these sources into a single `params::Map` accessible through any Iron request using `req.get_ref::<params::Params>()`. Example:
+This plugin combines all request parameters from these sources into a single `params::Map` accessible through any Iron request using `req.get_ref::<params::Params>()`. Working example:
 
 ```rust
-fn handler(req: &mut Request) -> IronResult<Response> {
-    use params::{Map, Params};
+// Visit `http://127.0.0.1:3000/?user[name]=Marie` to be greeted with a welcome message. Any other
+// request will return a 404 error.
 
-    let map: Map = try!(req.get_ref::<Params>());
+extern crate iron;
+extern crate params;
+
+use iron::prelude::*;
+
+fn handle_user(req: &mut Request) -> IronResult<Response> {
+    use params::{Params, Value};
+
+    let map = req.get_ref::<Params>().unwrap();
 
     match map.find(&["user", "name"]) {
-        // Assume, for example, the request URL here is:
-        // http://localhost:3000/handler?user[name]=Marie
-        Some(&Value::String(ref name)) => assert_eq!(name, "Marie"),
-        _ => panic!("Unexpected parameter type!"),
+        Some(&Value::String(ref name)) if name == "Marie" => {
+            Ok(Response::with((iron::status::Ok, "Welcome back, Marie!")))
+        },
+        _ => Ok(Response::with(iron::status::NotFound)),
     }
+}
+
+fn main() {
+    Iron::new(handle_user).http("127.0.0.1:3000").unwrap();
 }
 ```
 
