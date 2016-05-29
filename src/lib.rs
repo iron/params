@@ -7,10 +7,18 @@ extern crate iron;
 extern crate multipart;
 extern crate num;
 extern crate plugin;
+#[cfg(feature = "serde")]
+extern crate serde as serde_crate;
 extern crate serde_json;
 extern crate urlencoded;
 
+#[cfg(test)]
+#[macro_use]
+extern crate maplit;
+
 mod conversion;
+#[cfg(feature = "serde")]
+pub mod serde;
 
 use multipart::server::Multipart;
 use iron::{headers, mime, Request};
