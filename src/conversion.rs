@@ -140,3 +140,19 @@ impl<T: FromValue> FromValue for BTreeMap<String, T> {
         }
     }
 }
+
+#[test]
+fn cast_within_bounds() {
+    assert_eq!(<u8 as FromValue>::from_value(&Value::U64(100)), Some(100));
+    assert_eq!(<u8 as FromValue>::from_value(&Value::String("100".to_owned())), Some(100));
+    assert_eq!(<i8 as FromValue>::from_value(&Value::I64(-100)), Some(-100));
+    assert_eq!(<i8 as FromValue>::from_value(&Value::String("-100".to_owned())), Some(-100));
+}
+
+#[test]
+fn cast_out_of_bounds() {
+    assert!(<u8 as FromValue>::from_value(&Value::U64(1000)).is_none());
+    assert!(<u8 as FromValue>::from_value(&Value::String("1000".to_owned())).is_none());
+    assert!(<i8 as FromValue>::from_value(&Value::I64(-1000)).is_none());
+    assert!(<i8 as FromValue>::from_value(&Value::String("-1000".to_owned())).is_none());
+}
