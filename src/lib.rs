@@ -25,7 +25,7 @@ use iron::{headers, mime, Request};
 use iron::mime::Mime;
 use iron::request::Body;
 use iron::typemap::Key;
-use plugin::{Pluggable, Plugin};
+use plugin::{Extensible, Pluggable, Plugin};
 use serde_json::value::Value as Json;
 use std::collections::BTreeMap;
 use std::error::Error as StdError;
@@ -484,7 +484,9 @@ impl<'a, 'b> Plugin<Request<'a, 'b>> for Params {
     fn eval(req: &mut Request) -> Result<Map, ParamsError> {
         let mut map = try!(try_parse_json_into_map(req));
         let has_json_body = !map.is_empty();
-        try!(try_parse_multipart(req, &mut map));
+        if let Some(dir) = try!(try_parse_multipart(req, &mut map)) {
+            append_multipart_save_dir(req, dir);
+        }
         try!(try_parse_url_encoded::<urlencoded::UrlEncodedQuery>(req, &mut map));
         if !has_json_body {
             try!(try_parse_url_encoded::<urlencoded::UrlEncodedBody>(req, &mut map));
@@ -549,7 +551,9 @@ impl ToParams for Json {
     }
 }
 
-fn try_parse_multipart(req: &mut Request, map: &mut Map) -> Result<(), ParamsError> {
+fn try_parse_multipart(req: &mut Request, map: &mut Map)
+    -> Result<Option<multipart::server::SaveDir>, ParamsError>
+{
     // This is a wrapper that allows an Iron request to be processed by the `multipart` crate. Its
     // implementation of `multipart::server::HttpRequest` is taken from `multipart` itself, which
     // requires the `iron` crate feature on compilation. To minimize a messy dependency graph that
@@ -580,10 +584,10 @@ fn try_parse_multipart(req: &mut Request, map: &mut Map) -> Result<(), ParamsErr
 
     let mut multipart = match Multipart::from_request(MultipartIronRequest(req)) {
         Ok(multipart) => multipart,
-        Err(_) => return Ok(()),
+        Err(_) => return Ok(None),
     };
 
-    let mut entries = match multipart.save_all() {
+    let entries = match multipart.save_all() {
         multipart::server::SaveResult::Full(entries) => entries,
         multipart::server::SaveResult::Partial(_, err) => return Err(err.into()),
         multipart::server::SaveResult::Error(err) => return Err(err.into()),
@@ -593,15 +597,33 @@ fn try_parse_multipart(req: &mut Request, map: &mut Map) -> Result<(), ParamsErr
         try!(map.assign(&path, Value::String(value)));
     }
 
-    if !entries.files.is_empty() {
-        entries.dir.keep();
-    }
+    let has_files = !entries.files.is_empty();
 
     for (path, file) in entries.files {
         try!(map.assign(&path, Value::File(file.into())));
     }
 
-    Ok(())
+    if has_files {
+        Ok(Some(entries.dir))
+    } else {
+        Ok(None)
+    }
+}
+
+fn append_multipart_save_dir(req: &mut Request, dir: multipart::server::SaveDir) {
+    let mut extensions = req.extensions_mut();
+
+    if !extensions.contains::<SaveDirExt>() {
+        extensions.insert::<SaveDirExt>(vec![]);
+    }
+
+    extensions.get_mut::<SaveDirExt>().unwrap().push(dir);
+
+    struct SaveDirExt;
+
+    impl Key for SaveDirExt {
+        type Value = Vec<multipart::server::SaveDir>;
+    }
 }
 
 fn try_parse_url_encoded<'a, 'b, P>(req: &mut Request<'a, 'b>, map: &mut Map)
