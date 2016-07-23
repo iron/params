@@ -1,4 +1,4 @@
-# params
+# params [![Build Status](https://secure.travis-ci.org/iron/params.png?branch=master)](https://travis-ci.org/iron/params)
 
 A plugin for the [Iron](https://github.com/iron/iron) web framework that parses parameters from incoming requests from the following sources:
 
