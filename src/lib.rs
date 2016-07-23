@@ -30,7 +30,7 @@ use serde_json::value::Value as Json;
 use std::collections::BTreeMap;
 use std::error::Error as StdError;
 use std::{fmt, fs};
-use std::io::{self, Read};
+use std::io;
 use std::ops::{Deref, DerefMut};
 use std::path::Path;
 
