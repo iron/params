@@ -13,8 +13,8 @@ bodyparser = "0.4"
 iron = "0.4"
 num = "0.1"
 plugin = "0.2"
-serde = { version = "0.7", optional = true }
-serde_json = "0.7"
+serde = { version = "0.8", optional = true }
+serde_json = "0.8"
 urlencoded = "0.4"
 
 [dependencies.multipart]
