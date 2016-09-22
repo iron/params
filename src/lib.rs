@@ -152,17 +152,20 @@ impl fmt::Debug for Value {
 /// An uploaded file that was received as part of `multipart/form-data` parsing.
 ///
 /// Files are streamed to disk because they may not fit in memory.
-pub struct File(multipart::server::SavedFile);
+pub struct File {
+    file: multipart::server::SavedFile,
+    content_type: Mime,
+}
 
 impl File {
     /// Attempts to open the file in read-only mode.
     pub fn open(&self) -> io::Result<fs::File> {
-        fs::File::open(&self.0.path)
+        fs::File::open(&self.file.path)
     }
 
     /// The path to the temporary file where the data was saved.
     pub fn path(&self) -> &Path {
-        self.0.path.as_path()
+        self.file.path.as_path()
     }
 
     /// The filename that was specified in the request, unfiltered.
@@ -172,32 +175,46 @@ impl File {
     /// This may or may not be legal on the local filesystem, and so you should *not* blindly
     /// append it to a `Path`, as such behavior could easily be exploited by a malicious client.
     pub fn filename(&self) -> Option<&str> {
-        self.0.filename.as_ref().map(|f| &**f)
+        self.file.filename.as_ref().map(|f| &**f)
     }
 
     /// The size of the file, in bytes.
     pub fn size(&self) -> u64 {
-        self.0.size
+        self.file.size
+    }
+
+    /// Get the MIME type (`Content-Type` value) of this file, if supplied by the client, or
+    /// `"applicaton/octet-stream"` otherwise.
+    ///
+    /// # Warning
+    ///
+    /// You should treat this value as untrustworthy because it can be spoofed by the client.
+    pub fn content_type(&self) -> &Mime {
+        &self.content_type
     }
 }
 
 /// This implementation does not copy or modify the underlying file.
 impl Clone for File {
     fn clone(&self) -> File {
-        File(multipart::server::SavedFile {
-            path: self.0.path.clone(),
-            filename: self.0.filename.clone(),
-            size: self.0.size,
-        })
+        File {
+            file: multipart::server::SavedFile {
+                path: self.file.path.clone(),
+                filename: self.file.filename.clone(),
+                size: self.file.size,
+            },
+            content_type: self.content_type.clone(),
+        }
     }
 }
 
 impl fmt::Debug for File {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("File")
-            .field("path", &self.0.path)
-            .field("filename", &self.0.filename)
-            .field("size", &self.0.size)
+            .field("path", &self.file.path)
+            .field("filename", &self.file.filename)
+            .field("size", &self.file.size)
+            .field("content_type", &self.content_type)
             .finish()
     }
 }
@@ -205,13 +222,7 @@ impl fmt::Debug for File {
 /// Checks only for equality of the file's path.
 impl PartialEq for File {
     fn eq(&self, other: &File) -> bool {
-        self.0.path == other.0.path
-    }
-}
-
-impl From<multipart::server::SavedFile> for File {
-    fn from(file: multipart::server::SavedFile) -> File {
-        File(file)
+        self.file.path == other.file.path
     }
 }
 
@@ -600,7 +611,10 @@ fn try_parse_multipart(req: &mut Request, map: &mut Map)
                     temp_dir = Some(try!(TempDir::new("multipart")));
                 }
                 let saved_file = try!(file.save_in(temp_dir.as_ref().unwrap().path()));
-                try!(map.assign(&field.name, Value::File(saved_file.into())));
+                try!(map.assign(&field.name, Value::File(File {
+                    file: saved_file,
+                    content_type: file.content_type().clone(),
+                })));
             },
         }
     }

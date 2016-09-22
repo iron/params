@@ -23,7 +23,8 @@ fn handle(req: &mut Request) -> IronResult<Response> {
 //        "images": [File {
 //            path: "/tmp/path/to/file.jpg",
 //            filename: Some("file.jpg"),
-//            size: 280906
+//            size: 280906,
+//            content_type: Mime(Image, Jpeg, [])
 //        }],
 //        "x": ["1", "2"]
 //    })
