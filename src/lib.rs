@@ -21,7 +21,7 @@ mod conversion;
 #[cfg(feature = "serde")]
 pub mod serde;
 
-use multipart::server::{Multipart,MultipartData,SaveDir};
+use multipart::server::{Multipart, MultipartData, SaveDir};
 use iron::{headers, mime, Request};
 use iron::mime::Mime;
 use iron::request::Body;
@@ -587,29 +587,25 @@ fn try_parse_multipart(req: &mut Request, map: &mut Map)
         Ok(multipart) => multipart,
         Err(_) => return Ok(None),
     };
-    
-    let mut temp_dir=None;
 
-    while let Some(field)=try!{multipart.read_entry()} {
+    let mut temp_dir = None;
+
+    while let Some(field) = try!(multipart.read_entry()) {
         match field.data {
             MultipartData::Text(text) => {
-                try!{map.assign(&field.name, Value::String(text.to_owned()))};
+                try!(map.assign(&field.name, Value::String(String::from(text))));
             },
             MultipartData::File(mut file) => {
-                let tdir=temp_dir.take().unwrap_or(try!{TempDir::new("multipart")});
-                let saved_file=try!{file.save_in(tdir.path())};
-                try!{map.assign(&field.name,Value::File(saved_file.into()))};
-                temp_dir=Some(tdir);
+                if temp_dir.is_none() {
+                    temp_dir = Some(try!(TempDir::new("multipart")));
+                }
+                let saved_file = try!(file.save_in(temp_dir.as_ref().unwrap().path()));
+                try!(map.assign(&field.name, Value::File(saved_file.into())));
             },
-        }        
+        }
     }
 
-    if let Some(temp_dir)=temp_dir {
-        Ok(Some(SaveDir::Temp(temp_dir)))
-    }
-    else {
-        Ok(None)
-    }
+    Ok(temp_dir.map(|dir| SaveDir::Temp(dir)))
 }
 
 fn append_multipart_save_dir(req: &mut Request, dir: multipart::server::SaveDir) {
