@@ -11,6 +11,7 @@ extern crate plugin;
 extern crate serde as serde_crate;
 extern crate serde_json;
 extern crate urlencoded;
+extern crate tempdir;
 
 #[cfg(test)]
 #[macro_use]
@@ -20,7 +21,7 @@ mod conversion;
 #[cfg(feature = "serde")]
 pub mod serde;
 
-use multipart::server::Multipart;
+use multipart::server::{Multipart,MultipartData,SaveDir};
 use iron::{headers, mime, Request};
 use iron::mime::Mime;
 use iron::request::Body;
@@ -33,7 +34,7 @@ use std::{fmt, fs};
 use std::io;
 use std::ops::{Deref, DerefMut};
 use std::path::Path;
-
+use tempdir::TempDir;
 pub use conversion::FromValue;
 
 /// A representation of all possible types of request parameters.
@@ -586,26 +587,27 @@ fn try_parse_multipart(req: &mut Request, map: &mut Map)
         Ok(multipart) => multipart,
         Err(_) => return Ok(None),
     };
+    
+    let mut temp_dir=None;
 
-    let entries = match multipart.save_all() {
-        multipart::server::SaveResult::Full(entries) => entries,
-        multipart::server::SaveResult::Partial(_, err) => return Err(err.into()),
-        multipart::server::SaveResult::Error(err) => return Err(err.into()),
-    };
-
-    for (path, value) in entries.fields {
-        try!(map.assign(&path, Value::String(value)));
+    while let Some(field)=try!{multipart.read_entry()} {
+        match field.data {
+            MultipartData::Text(text) => {
+                try!{map.assign(&field.name, Value::String(text.to_owned()))};
+            },
+            MultipartData::File(mut file) => {
+                let tdir=temp_dir.take().unwrap_or(try!{TempDir::new("multipart")});
+                let saved_file=try!{file.save_in(tdir.path())};
+                try!{map.assign(&field.name,Value::File(saved_file.into()))};
+                temp_dir=Some(tdir);
+            },
+        }        
     }
 
-    let has_files = !entries.files.is_empty();
-
-    for (path, file) in entries.files {
-        try!(map.assign(&path, Value::File(file.into())));
+    if let Some(temp_dir)=temp_dir {
+        Ok(Some(SaveDir::Temp(temp_dir)))
     }
-
-    if has_files {
-        Ok(Some(entries.dir))
-    } else {
+    else {
         Ok(None)
     }
 }
