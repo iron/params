@@ -33,7 +33,7 @@ use std::error::Error as StdError;
 use std::{fmt, fs};
 use std::io;
 use std::ops::{Deref, DerefMut};
-use std::path::Path;
+use std::path::PathBuf;
 use tempdir::TempDir;
 pub use conversion::FromValue;
 
@@ -152,21 +152,10 @@ impl fmt::Debug for Value {
 /// An uploaded file that was received as part of `multipart/form-data` parsing.
 ///
 /// Files are streamed to disk because they may not fit in memory.
+#[derive(Clone, Debug)]
 pub struct File {
-    file: multipart::server::SavedFile,
-    content_type: Mime,
-}
-
-impl File {
-    /// Attempts to open the file in read-only mode.
-    pub fn open(&self) -> io::Result<fs::File> {
-        fs::File::open(&self.file.path)
-    }
-
     /// The path to the temporary file where the data was saved.
-    pub fn path(&self) -> &Path {
-        self.file.path.as_path()
-    }
+    pub path: PathBuf,
 
     /// The filename that was specified in the request, unfiltered.
     ///
@@ -174,14 +163,10 @@ impl File {
     ///
     /// This may or may not be legal on the local filesystem, and so you should *not* blindly
     /// append it to a `Path`, as such behavior could easily be exploited by a malicious client.
-    pub fn filename(&self) -> Option<&str> {
-        self.file.filename.as_ref().map(|f| &**f)
-    }
+    pub filename: Option<String>,
 
     /// The size of the file, in bytes.
-    pub fn size(&self) -> u64 {
-        self.file.size
-    }
+    pub size: u64,
 
     /// Get the MIME type (`Content-Type` value) of this file, if supplied by the client, or
     /// `"applicaton/octet-stream"` otherwise.
@@ -189,40 +174,20 @@ impl File {
     /// # Warning
     ///
     /// You should treat this value as untrustworthy because it can be spoofed by the client.
-    pub fn content_type(&self) -> &Mime {
-        &self.content_type
-    }
+    pub content_type: Mime,
 }
 
-/// This implementation does not copy or modify the underlying file.
-impl Clone for File {
-    fn clone(&self) -> File {
-        File {
-            file: multipart::server::SavedFile {
-                path: self.file.path.clone(),
-                filename: self.file.filename.clone(),
-                size: self.file.size,
-            },
-            content_type: self.content_type.clone(),
-        }
-    }
-}
-
-impl fmt::Debug for File {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("File")
-            .field("path", &self.file.path)
-            .field("filename", &self.file.filename)
-            .field("size", &self.file.size)
-            .field("content_type", &self.content_type)
-            .finish()
+impl File {
+    /// Attempts to open the file in read-only mode.
+    pub fn open(&self) -> io::Result<fs::File> {
+        fs::File::open(&self.path)
     }
 }
 
 /// Checks only for equality of the file's path.
 impl PartialEq for File {
     fn eq(&self, other: &File) -> bool {
-        self.file.path == other.file.path
+        self.path == other.path
     }
 }
 
@@ -612,7 +577,9 @@ fn try_parse_multipart(req: &mut Request, map: &mut Map)
                 }
                 let saved_file = try!(file.save_in(temp_dir.as_ref().unwrap().path()));
                 try!(map.assign(&field.name, Value::File(File {
-                    file: saved_file,
+                    path: saved_file.path,
+                    filename: saved_file.filename,
+                    size: saved_file.size,
                     content_type: file.content_type().clone(),
                 })));
             },
