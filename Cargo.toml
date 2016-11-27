@@ -1,6 +1,6 @@
 [package]
 name = "params"
-version = "0.5.0"
+version = "0.5.1"
 authors = ["Skyler Lipthay <skyler.lipthay@gmail.com>"]
 description = "A multi-source request parameters parser for Iron."
 readme = "README.md"
@@ -19,6 +19,7 @@ urlencoded = "0.4"
 tempdir = "0.3"
 
 [dependencies.multipart]
+default-features = false
 features = ["server"]
 version = "0.8"
 
