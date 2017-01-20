@@ -1,6 +1,6 @@
 [package]
 name = "params"
-version = "0.5.1"
+version = "0.6.0"
 authors = ["Skyler Lipthay <skyler.lipthay@gmail.com>"]
 description = "A multi-source request parameters parser for Iron."
 readme = "README.md"
