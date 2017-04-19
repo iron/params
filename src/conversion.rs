@@ -107,7 +107,7 @@ impl<T: FromValue> FromValue for Option<T> {
     fn from_value(value: &Value) -> Option<Option<T>> {
         match *value {
             Value::Null => Some(None),
-            _ => T::from_value(value).map(|result| Some(result)),
+            _ => T::from_value(value).map(Some),
         }
     }
 }

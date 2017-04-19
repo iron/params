@@ -8,12 +8,13 @@ extern crate multipart;
 extern crate num;
 extern crate plugin;
 #[cfg(feature = "serde")]
+#[macro_use]
 extern crate serde as serde_crate;
 extern crate serde_json;
 extern crate urlencoded;
 extern crate tempdir;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "serde"))]
 #[macro_use]
 extern crate maplit;
 
@@ -21,7 +22,8 @@ mod conversion;
 #[cfg(feature = "serde")]
 pub mod serde;
 
-use multipart::server::{Multipart, MultipartData, SaveDir};
+use multipart::server::{Multipart, MultipartData};
+use multipart::server::save::SaveDir;
 use iron::{headers, mime, Request};
 use iron::mime::Mime;
 use iron::request::Body;
@@ -192,7 +194,7 @@ impl PartialEq for File {
 }
 
 /// A type that maps keys to request parameter values.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Default)]
 pub struct Map(pub BTreeMap<String, Value>);
 
 impl Map {
@@ -339,29 +341,29 @@ impl fmt::Debug for Map {
     }
 }
 
-fn eat_base<'a>(path: &'a str) -> Result<(&'a str, &'a str), ParamsError> {
-    let open = path.char_indices().find(|&(_, c)| c == '[').map(|(i, _)| i).unwrap_or(path.len());
-    let base = &path[..open];
-    let remainder = &path[open..];
-    match base.is_empty() {
-        false => Ok((base, remainder)),
-        true => Err(InvalidPath),
+fn eat_base(path: &str) -> Result<(&str, &str), ParamsError> {
+    let length = path.len();
+    let open = path.find('[').unwrap_or(length);
+    let (base, remainder) = path.split_at(open);
+    if base.is_empty() {
+        Err(InvalidPath)
+    } else {
+        Ok((base, remainder))
     }
 }
 
 #[test]
 fn test_eat_base() {
+    assert_eq!(eat_base("nothing").unwrap(), ("nothing", ""));
     assert_eq!(eat_base("before[after]").unwrap(), ("before", "[after]"));
     assert!(eat_base("[][something]").is_err());
 }
 
-fn eat_index<'a>(path: &'a str) -> Result<(&'a str, &'a str), ParamsError> {
-    if path.chars().next() != Some('[') {
+fn eat_index(path: &str) -> Result<(&str, &str), ParamsError> {
+    if !path.starts_with('[') {
         return Err(InvalidPath);
     }
-
-    let index = path.char_indices().skip(1).find(|&(_, c)| c == ']');
-    let close = try!(index.ok_or(InvalidPath)).0;
+    let close = try!(path.find(']').ok_or(InvalidPath));
     let key = &path[1..close];
     let remainder = &path[1 + close..];
 
@@ -373,6 +375,7 @@ fn test_eat_index() {
     assert_eq!(eat_index("[something][fishy]").unwrap(), ("something", "[fishy]"));
     assert_eq!(eat_index("[][something]").unwrap(), ("", "[something]"));
     assert!(eat_index("invalid[]").is_err());
+    assert!(eat_index("invalid").is_err());
 }
 
 /// An error representing any of the possible errors that can occur during parameter processing.
@@ -506,9 +509,9 @@ impl ToParams for Json {
 
     fn to_value(&self) -> Result<Value, ParamsError> {
         match *self {
-            Json::I64(value) => Ok(Value::I64(value)),
-            Json::U64(value) => Ok(Value::U64(value)),
-            Json::F64(value) => Ok(Value::F64(value)),
+            Json::Number(ref number) if number.is_u64() => Ok(Value::U64(number.as_u64().unwrap())),
+            Json::Number(ref number) if number.is_i64() => Ok(Value::I64(number.as_i64().unwrap())),
+            Json::Number(ref number) => Ok(Value::F64(number.as_f64().unwrap())),
             Json::String(ref value) => Ok(Value::String(value.clone())),
             Json::Bool(value) => Ok(Value::Boolean(value)),
             Json::Null => Ok(Value::Null),
@@ -529,7 +532,7 @@ impl ToParams for Json {
 }
 
 fn try_parse_multipart(req: &mut Request, map: &mut Map)
-    -> Result<Option<multipart::server::SaveDir>, ParamsError>
+    -> Result<Option<SaveDir>, ParamsError>
 {
     // This is a wrapper that allows an Iron request to be processed by the `multipart` crate. Its
     // implementation of `multipart::server::HttpRequest` is taken from `multipart` itself, which
@@ -569,27 +572,28 @@ fn try_parse_multipart(req: &mut Request, map: &mut Map)
     while let Some(field) = try!(multipart.read_entry()) {
         match field.data {
             MultipartData::Text(text) => {
-                try!(map.assign(&field.name, Value::String(String::from(text))));
+                try!(map.assign(&field.name, Value::String(text.into())));
             },
             MultipartData::File(mut file) => {
                 if temp_dir.is_none() {
                     temp_dir = Some(try!(TempDir::new("multipart")));
                 }
-                let saved_file = try!(file.save_in(temp_dir.as_ref().unwrap().path()));
+                let save_dir = temp_dir.as_ref().unwrap().path();
+                let saved_file = try!(file.save().with_dir(save_dir).into_result_strict());
                 try!(map.assign(&field.name, Value::File(File {
                     path: saved_file.path,
                     filename: saved_file.filename,
                     size: saved_file.size,
-                    content_type: file.content_type().clone(),
+                    content_type: file.content_type.clone(),
                 })));
             },
         }
     }
 
-    Ok(temp_dir.map(|dir| SaveDir::Temp(dir)))
+    Ok(temp_dir.map(SaveDir::Temp))
 }
 
-fn append_multipart_save_dir(req: &mut Request, dir: multipart::server::SaveDir) {
+fn append_multipart_save_dir(req: &mut Request, dir: SaveDir) {
     let mut extensions = req.extensions_mut();
 
     if !extensions.contains::<SaveDirExt>() {
@@ -601,7 +605,7 @@ fn append_multipart_save_dir(req: &mut Request, dir: multipart::server::SaveDir)
     struct SaveDirExt;
 
     impl Key for SaveDirExt {
-        type Value = Vec<multipart::server::SaveDir>;
+        type Value = Vec<SaveDir>;
     }
 }
 
