@@ -9,19 +9,19 @@ repository = "https://github.com/iron/params"
 documentation = "http://ironframework.io/doc/params/index.html"
 
 [dependencies]
-bodyparser = "0.5"
+bodyparser = "0.6"
 iron = "0.5"
 num = "0.1"
 plugin = "0.2"
-serde = { version = "0.8", optional = true }
-serde_json = "0.8"
+serde = { version = "0.9", optional = true }
+serde_json = "0.9"
 urlencoded = "0.5"
 tempdir = "0.3"
 
 [dependencies.multipart]
 default-features = false
 features = ["server"]
-version = "0.8"
+version = "0.12"
 
 [dev-dependencies]
 maplit = "0.1"
