@@ -9,12 +9,12 @@ repository = "https://github.com/iron/params"
 documentation = "http://ironframework.io/doc/params/index.html"
 
 [dependencies]
-bodyparser = "0.6"
+bodyparser = "0.7"
 iron = "0.5"
 num = "0.1"
 plugin = "0.2"
-serde = { version = "0.9", optional = true }
-serde_json = "0.9"
+serde = { version = "1", optional = true }
+serde_json = "1"
 urlencoded = "0.5"
 tempdir = "0.3"
 
