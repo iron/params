@@ -1,7 +1,6 @@
 use serde_crate::de;
-use serde_crate::de::{Unexpected, Error as ErrorTrait};
+use serde_crate::de::{IntoDeserializer, Unexpected, Error as ErrorTrait};
 use serde_crate::de::value::Error;
-use serde_crate::de::value::ValueDeserializer as SerdeValueDeserializer;
 use std::collections::btree_map::Iter as BTreeMapIter;
 use std::iter::Peekable;
 use super::Value;
@@ -11,7 +10,7 @@ struct ValueDeserializer<'a>(&'a Value);
 macro_rules! impl_primitive {
     ($ty:ty, $impl_method:ident, $visitor_method:ident) => {
         #[inline]
-        fn $impl_method<V: ::serde_crate::de::Visitor>(self, visitor: V)
+        fn $impl_method<V: ::serde_crate::de::Visitor<'de>>(self, visitor: V)
             -> Result<V::Value, ::serde_crate::de::value::Error>
         {
             match <$ty as ::FromValue>::from_value(&self.0) {
@@ -22,11 +21,11 @@ macro_rules! impl_primitive {
     }
 }
 
-impl<'a> de::Deserializer for ValueDeserializer<'a> {
+impl<'de> de::Deserializer<'de> for ValueDeserializer<'de> {
     type Error = Error;
 
     #[inline]
-    fn deserialize<V: de::Visitor>(self, _v: V) -> Result<V::Value, Error> {
+    fn deserialize_any<V: de::Visitor<'de>>(self, _v: V) -> Result<V::Value, Error> {
         Err(Error::custom("Deserializer::deserialize is not supported"))
     }
 
@@ -43,28 +42,28 @@ impl<'a> de::Deserializer for ValueDeserializer<'a> {
     impl_primitive!(f64, deserialize_f64, visit_f64);
     impl_primitive!(String, deserialize_string, visit_string);
 
-    forward_to_deserialize! {
-        char str bytes byte_buf unit unit_struct newtype_struct seq_fixed_size
-        tuple tuple_struct struct_field enum ignored_any
+    forward_to_deserialize_any! {
+        char str bytes byte_buf unit unit_struct newtype_struct
+        tuple tuple_struct identifier enum ignored_any
     }
 
-    fn deserialize_option<V: de::Visitor>(self, visitor: V) -> Result<V::Value, Error> {
+    fn deserialize_option<V: de::Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
         match *self.0 {
             Value::Null => visitor.visit_none(),
             _ => visitor.visit_some(self),
         }
     }
 
-    fn deserialize_seq<V: de::Visitor>(self, visitor: V) -> Result<V::Value, Error> {
+    fn deserialize_seq<V: de::Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
         struct SeqVisitor<'a> {
             vec: &'a Vec<Value>,
             index: usize,
         }
 
-        impl<'a> de::SeqVisitor for SeqVisitor<'a> {
+        impl<'de> de::SeqAccess<'de> for SeqVisitor<'de> {
             type Error = Error;
 
-            fn visit_seed<T: de::DeserializeSeed>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error> {
+            fn next_element_seed<T: de::DeserializeSeed<'de>>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error> {
                 if self.index < self.vec.len() {
                     let deserializer = ValueDeserializer(&self.vec[self.index]);
                     self.index += 1;
@@ -74,8 +73,8 @@ impl<'a> de::Deserializer for ValueDeserializer<'a> {
                 }
             }
 
-            fn size_hint(&self) -> (usize, Option<usize>) {
-                (self.vec.len(), Some(self.vec.len()))
+            fn size_hint(&self) -> Option<usize> {
+                Some(self.vec.len())
             }
         }
 
@@ -85,15 +84,15 @@ impl<'a> de::Deserializer for ValueDeserializer<'a> {
         }
     }
 
-    fn deserialize_map<V: de::Visitor>(self, visitor: V) -> Result<V::Value, Error> {
+    fn deserialize_map<V: de::Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
         struct MapVisitor<'a> {
             iter: Peekable<BTreeMapIter<'a, String, Value>>,
         }
 
-        impl<'a> de::MapVisitor for MapVisitor<'a> {
+        impl<'de> de::MapAccess<'de> for MapVisitor<'de> {
             type Error = Error;
 
-            fn visit_key_seed<K: de::DeserializeSeed>(&mut self, seed: K) -> Result<Option<K::Value>, Self::Error> {
+            fn next_key_seed<K: de::DeserializeSeed<'de>>(&mut self, seed: K) -> Result<Option<K::Value>, Self::Error> {
                 if let Some(v) = self.iter.peek() {
                     let str_deserializer = v.0.as_str().into_deserializer();
                     seed.deserialize(str_deserializer).map(Some)
@@ -102,7 +101,7 @@ impl<'a> de::Deserializer for ValueDeserializer<'a> {
                 }
             }
 
-            fn visit_value_seed<V: de::DeserializeSeed>(&mut self, seed: V) -> Result<V::Value, Self::Error> {
+            fn next_value_seed<V: de::DeserializeSeed<'de>>(&mut self, seed: V) -> Result<V::Value, Self::Error> {
                 if let Some(v) = self.iter.next() {
                     let deserializer = ValueDeserializer(v.1);
                     seed.deserialize(deserializer)
@@ -123,7 +122,7 @@ impl<'a> de::Deserializer for ValueDeserializer<'a> {
         }
     }
 
-    fn deserialize_struct<V: de::Visitor>(self, _n: &'static str, _f: &'static [&'static str], visitor: V) -> Result<V::Value, Self::Error> {
+    fn deserialize_struct<V: de::Visitor<'de>>(self, _n: &'static str, _f: &'static [&'static str], visitor: V) -> Result<V::Value, Self::Error> {
         self.deserialize_map(visitor)
     }
 }
@@ -135,7 +134,7 @@ impl<'a> de::Deserializer for ValueDeserializer<'a> {
 ///
 /// This function utilizes `FromValue` where appropriate, so e.g. `String`s can be converted to
 /// numeric types if necessary and possible.
-pub fn deserialize<T: de::Deserialize>(value: &Value) -> Result<T, Error> {
+pub fn deserialize<'de, T: de::Deserialize<'de>>(value: &'de Value) -> Result<T, Error> {
     let deserializer = ValueDeserializer(value);
     de::Deserialize::deserialize(deserializer)
 }
@@ -245,13 +244,13 @@ mod tests {
             Y,
         }
 
-        impl de::Deserialize for PointField {
-            fn deserialize<D: de::Deserializer>(deserializer: D)
+        impl<'de> de::Deserialize<'de> for PointField {
+            fn deserialize<D: de::Deserializer<'de>>(deserializer: D)
                 -> Result<PointField, D::Error>
             {
                 struct PointFieldVisitor;
 
-                impl de::Visitor for PointFieldVisitor {
+                impl<'de> de::Visitor<'de> for PointFieldVisitor {
                     type Value = PointField;
 
                     fn visit_str<E: de::Error>(self, value: &str) -> Result<PointField, E> {
@@ -267,12 +266,12 @@ mod tests {
                     }
                 }
 
-                deserializer.deserialize(PointFieldVisitor)
+                deserializer.deserialize_any(PointFieldVisitor)
             }
         }
 
-        impl de::Deserialize for Point {
-            fn deserialize<D: de::Deserializer>(deserializer: D) -> Result<Point, D::Error> {
+        impl<'de> de::Deserialize<'de> for Point {
+            fn deserialize<D: de::Deserializer<'de>>(deserializer: D) -> Result<Point, D::Error> {
                 static FIELDS: &'static [&'static str] = &["x", "y"];
                 deserializer.deserialize_struct("Point", FIELDS, PointVisitor)
             }
@@ -280,17 +279,17 @@ mod tests {
 
         struct PointVisitor;
 
-        impl de::Visitor for PointVisitor {
+        impl<'de> de::Visitor<'de> for PointVisitor {
             type Value = Point;
 
-            fn visit_map<V: de::MapVisitor>(self, mut visitor: V) -> Result<Point, V::Error> {
+            fn visit_map<V: de::MapAccess<'de>>(self, mut visitor: V) -> Result<Point, V::Error> {
                 let mut x = None;
                 let mut y = None;
 
                 loop {
-                    match try!(visitor.visit_key()) {
-                        Some(PointField::X) => x = Some(try!(visitor.visit_value())),
-                        Some(PointField::Y) => y = Some(try!(visitor.visit_value())),
+                    match try!(visitor.next_key()) {
+                        Some(PointField::X) => x = Some(try!(visitor.next_value())),
+                        Some(PointField::Y) => y = Some(try!(visitor.next_value())),
                         None => break,
                     }
                 }
