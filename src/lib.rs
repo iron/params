@@ -594,7 +594,7 @@ fn try_parse_multipart(req: &mut Request, map: &mut Map)
 }
 
 fn append_multipart_save_dir(req: &mut Request, dir: SaveDir) {
-    let mut extensions = req.extensions_mut();
+    let extensions = req.extensions_mut();
 
     if !extensions.contains::<SaveDirExt>() {
         extensions.insert::<SaveDirExt>(vec![]);
