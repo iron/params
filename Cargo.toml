@@ -1,6 +1,6 @@
 [package]
 name = "params"
-version = "0.7.1"
+version = "0.8.0"
 authors = ["Skyler Lipthay <skyler.lipthay@gmail.com>"]
 description = "A multi-source request parameters parser for Iron."
 readme = "README.md"
@@ -9,13 +9,13 @@ repository = "https://github.com/iron/params"
 documentation = "http://ironframework.io/doc/params/index.html"
 
 [dependencies]
-bodyparser = "0.6"
-iron = "0.5"
+bodyparser = ">=0.6, <0.8"
+iron = ">=0.5, <0.7"
 num = "0.1"
 plugin = "0.2"
 serde = { version = "0.9", optional = true }
 serde_json = "0.9"
-urlencoded = "0.5"
+urlencoded = ">=0.5, 0.7"
 tempdir = "0.3"
 
 [dependencies.multipart]
