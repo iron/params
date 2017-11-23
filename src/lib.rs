@@ -14,10 +14,6 @@ extern crate serde_json;
 extern crate urlencoded;
 extern crate tempdir;
 
-#[cfg(all(test, feature = "serde"))]
-#[macro_use]
-extern crate maplit;
-
 mod conversion;
 #[cfg(feature = "serde")]
 pub mod serde;

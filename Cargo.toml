@@ -22,6 +22,3 @@ tempdir = "0.3"
 default-features = false
 features = ["server"]
 version = "0.12"
-
-[dev-dependencies]
-maplit = "0.1"
